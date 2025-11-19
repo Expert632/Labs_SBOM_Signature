@@ -1,4 +1,4 @@
-name: Docker Scan Lab with Syft + Grype
+name: Docker Scan Lab with Syft + Grype (Always Green)
 
 on:
   push:
@@ -13,19 +13,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Récupérer le code
+      # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2️⃣ Configurer Docker
+      # 2️⃣ Set up Docker
       - name: Set up Docker
         uses: docker/setup-buildx-action@v2
 
-      # 3️⃣ Construire l'image Docker
+      # 3️⃣ Build Docker image
       - name: Build Docker image
         run: docker build -t demo-app .
 
-      # 4️⃣ Installer Syft et Grype
+      # 4️⃣ Install Syft and Grype
       - name: Install Syft and Grype
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh
@@ -33,17 +33,18 @@ jobs:
           syft --version
           grype --version
 
-      # 5️⃣ Générer SBOM avec Syft
+      # 5️⃣ Generate SBOM (always succeeds)
       - name: Generate SBOM
         run: syft docker:demo-app -o spdx-json > sbom.json || true
 
-      # 6️⃣ Scanner vulnérabilités avec Grype
+      # 6️⃣ Scan vulnerabilities (always succeeds)
       - name: Scan Docker image for vulnerabilities
         id: grype_scan
         run: |
+          # Run Grype and force success
           grype docker:demo-app -o json > grype-report.json || true
           
-          # Vérifier vulnérabilité CRITICAL
+          # Check for CRITICAL vulnerabilities
           if grep -q '"severity": "Critical"' grype-report.json 2>/dev/null; then
             echo "Vulnerability detected" | tee grype-report.txt
             echo "true" >> result.tmp
@@ -52,14 +53,14 @@ jobs:
             echo "false" >> result.tmp
           fi
 
-          # Stocker le résultat pour GitHub Actions
+          # Set GitHub Actions env variable
           echo "vuln=$(cat result.tmp)" >> $GITHUB_ENV
 
-      # 7️⃣ Signer SBOM (simulation)
+      # 7️⃣ Sign SBOM (simulation)
       - name: Sign SBOM
         run: echo "signed" > sbom.sig
 
-      # 8️⃣ Afficher log pédagogique
+      # 8️⃣ Display final log
       - name: Display vulnerability result
         run: |
           if [ "$vuln" = "true" ]; then
