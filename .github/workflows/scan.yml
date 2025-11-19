@@ -1,4 +1,4 @@
-name: Docker Scan with SBOM and Signature
+name: Docker Scan Lab with Syft + Grype
 
 on:
   push:
@@ -25,40 +25,41 @@ jobs:
       - name: Build Docker image
         run: docker build -t demo-app .
 
-      # 4️⃣ Installer Trivy sur le runner
-      - name: Install Trivy
+      # 4️⃣ Installer Syft et Grype
+      - name: Install Syft and Grype
         run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh
-          trivy --version
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh
+          syft --version
+          grype --version
 
-      # 5️⃣ Scanner l'image et générer JSON + TXT
+      # 5️⃣ Générer SBOM avec Syft
+      - name: Generate SBOM
+        run: syft docker:demo-app -o spdx-json > sbom.json || true
+
+      # 6️⃣ Scanner vulnérabilités avec Grype
       - name: Scan Docker image for vulnerabilities
-        id: trivy_scan
+        id: grype_scan
         run: |
-          # Scanner l'image
-          trivy image --format json --output trivy-report.json demo-app || true
+          grype docker:demo-app -o json > grype-report.json || true
           
-          # Vérifier vulnérabilité CRITICAL et générer TXT
-          if grep -q '"Severity": "CRITICAL"' trivy-report.json 2>/dev/null; then
-            echo "Vulnerability detected" | tee trivy-report.txt
+          # Vérifier vulnérabilité CRITICAL
+          if grep -q '"severity": "Critical"' grype-report.json 2>/dev/null; then
+            echo "Vulnerability detected" | tee grype-report.txt
             echo "true" >> result.tmp
           else
-            echo "No vulnerability detected" | tee trivy-report.txt
+            echo "No vulnerability detected" | tee grype-report.txt
             echo "false" >> result.tmp
           fi
 
           # Stocker le résultat pour GitHub Actions
           echo "vuln=$(cat result.tmp)" >> $GITHUB_ENV
 
-      # 6️⃣ Générer SBOM (avec vulnérabilité incluse)
-      - name: Generate SBOM
-        run: trivy sbom --scanners vuln demo-app --format spdx-json --output sbom.json || true
-
       # 7️⃣ Signer SBOM (simulation)
       - name: Sign SBOM
         run: echo "signed" > sbom.sig
 
-      # 8️⃣ Afficher résultat final
+      # 8️⃣ Afficher log pédagogique
       - name: Display vulnerability result
         run: |
           if [ "$vuln" = "true" ]; then
