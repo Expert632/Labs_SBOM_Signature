@@ -25,30 +25,27 @@ jobs:
       - name: Build Docker image
         run: docker build -t demo-app .
 
-      # 4️⃣ Installer Trivy sur le runner
-      - name: Install Trivy
-        run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh
-          trivy --version
-
-      # 5️⃣ Scanner l'image et générer JSON + TXT
+      # 4️⃣ Scanner l'image avec Trivy via GitHub Action officielle
       - name: Scan Docker image for vulnerabilities
         id: trivy_scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: demo-app
+          format: json
+          output: trivy-report.json
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      # 5️⃣ Vérifier vulnérabilité critique et générer TXT + variable GitHub
+      - name: Check for critical vulnerabilities
         run: |
-          # Scanner l'image et générer le JSON
-          trivy image --format json --output trivy-report.json demo-app
-          
-          # Vérifier si une vulnérabilité CRITICAL est présente
           if grep -q '"Severity": "CRITICAL"' trivy-report.json; then
             echo "Vulnerability detected" | tee trivy-report.txt
-            echo "true" >> result.tmp
+            echo "vuln=true" >> $GITHUB_ENV
           else
             echo "No vulnerability detected" | tee trivy-report.txt
-            echo "false" >> result.tmp
+            echo "vuln=false" >> $GITHUB_ENV
           fi
-          
-          # Stocker le résultat pour GitHub Actions
-          echo "vuln=$(cat result.tmp)" >> $GITHUB_ENV
 
       # 6️⃣ Générer SBOM
       - name: Generate SBOM
