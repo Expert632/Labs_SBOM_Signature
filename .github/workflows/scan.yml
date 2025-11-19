@@ -25,13 +25,10 @@ jobs:
       - name: Build Docker image
         run: docker build -t demo-app .
 
-      # 4️⃣ Installer Trivy
+      # 4️⃣ Installer Trivy via le script officiel
       - name: Install Trivy
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wget
-          wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.44.0_Linux-64bit.deb
-          sudo dpkg -i trivy_0.44.0_Linux-64bit.deb
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh
 
       # 5️⃣ Scanner l'image et générer JSON + TXT
       - name: Scan Docker image for vulnerabilities
@@ -56,7 +53,7 @@ jobs:
       - name: Generate SBOM
         run: trivy sbom demo-app --format spdx-json --output sbom.json
 
-      # 7️⃣ Simuler signature SBOM
+      # 7️⃣ Signer SBOM
       - name: Sign SBOM
         run: echo "signed" > sbom.sig
 
