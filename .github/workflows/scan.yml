@@ -25,17 +25,11 @@ jobs:
       - name: Build Docker image
         run: docker build -t demo-app .
 
-      # 4️⃣ Installer Trivy via le script officiel
-      - name: Install Trivy
-        run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh
-
-      # 5️⃣ Scanner l'image et générer JSON + TXT
-      - name: Scan Docker image for vulnerabilities
+      # 4️⃣ Scanner l'image avec Trivy via Docker et générer JSON + TXT
+      - name: Scan Docker image with Trivy
         id: trivy_scan
         run: |
-          # Scanner l'image en JSON
-          trivy image --format json --output trivy-report.json demo-app
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --format json --output trivy-report.json demo-app
           
           # Vérifier si une vulnérabilité CRITICAL est présente
           if grep -q '"Severity": "CRITICAL"' trivy-report.json; then
@@ -45,19 +39,19 @@ jobs:
             echo "No vulnerability detected" | tee trivy-report.txt
             echo "false" >> result.tmp
           fi
-          
+
           # Stocker le résultat pour GitHub Actions
           echo "vuln=$(cat result.tmp)" >> $GITHUB_ENV
 
-      # 6️⃣ Générer SBOM
+      # 5️⃣ Générer SBOM
       - name: Generate SBOM
-        run: trivy sbom demo-app --format spdx-json --output sbom.json
+        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest sbom demo-app --format spdx-json --output sbom.json
 
-      # 7️⃣ Signer SBOM
+      # 6️⃣ Signer SBOM (simulation)
       - name: Sign SBOM
         run: echo "signed" > sbom.sig
 
-      # 8️⃣ Afficher résultat final
+      # 7️⃣ Afficher résultat final
       - name: Display vulnerability result
         run: |
           if [ "$vuln" = "true" ]; then
