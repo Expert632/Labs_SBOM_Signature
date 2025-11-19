@@ -1,0 +1,37 @@
+name: Scan Docker Image
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        run: docker build -t demo-app .
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: demo-app
+          format: 'json'
+          output: 'trivy-report.json'
+          exit-code: '1'
+          ignore-unfixed: false
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Generate SBOM
+        run: trivy sbom demo-app --format spdx-json --output sbom.json
+
+      - name: Sign SBOM
+        run: |
+          echo "Simulating signature for SBOM"
+          echo "signed" > sbom.sig
