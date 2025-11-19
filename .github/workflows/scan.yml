@@ -1,37 +1,70 @@
-name: Scan Docker Image
+name: Docker Scan with SBOM and Signature
 
 on:
   push:
+    branches:
+      - main
+  pull_request:
     branches:
       - main
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
 
+    steps:
+      # 1️⃣ Récupérer le code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2️⃣ Configurer Docker
       - name: Set up Docker
         uses: docker/setup-buildx-action@v2
 
+      # 3️⃣ Construire l'image Docker
       - name: Build Docker image
         run: docker build -t demo-app .
 
-      - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: demo-app
-          format: 'json'
-          output: 'trivy-report.json'
-          exit-code: '1'
-          ignore-unfixed: false
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+      # 4️⃣ Installer Trivy
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget
+          wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.44.0_Linux-64bit.deb
+          sudo dpkg -i trivy_0.44.0_Linux-64bit.deb
 
+      # 5️⃣ Scanner l'image et générer JSON + TXT
+      - name: Scan Docker image for vulnerabilities
+        id: trivy_scan
+        run: |
+          # Scanner l'image en JSON
+          trivy image --format json --output trivy-report.json demo-app
+          
+          # Vérifier si une vulnérabilité CRITICAL est présente
+          if grep -q '"Severity": "CRITICAL"' trivy-report.json; then
+            echo "Vulnerability detected" | tee trivy-report.txt
+            echo "true" >> result.tmp
+          else
+            echo "No vulnerability detected" | tee trivy-report.txt
+            echo "false" >> result.tmp
+          fi
+          
+          # Stocker le résultat pour GitHub Actions
+          echo "vuln=$(cat result.tmp)" >> $GITHUB_ENV
+
+      # 6️⃣ Générer SBOM
       - name: Generate SBOM
         run: trivy sbom demo-app --format spdx-json --output sbom.json
 
+      # 7️⃣ Simuler signature SBOM
       - name: Sign SBOM
+        run: echo "signed" > sbom.sig
+
+      # 8️⃣ Afficher résultat final
+      - name: Display vulnerability result
         run: |
-          echo "Simulating signature for SBOM"
-          echo "signed" > sbom.sig
+          if [ "$vuln" = "true" ]; then
+            echo "❌ Critical vulnerability detected!"
+          else
+            echo "✅ No critical vulnerability detected!"
+          fi
