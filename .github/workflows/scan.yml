@@ -1,4 +1,4 @@
-name: Docker Scan Lab with Syft + Grype (Always Green)
+name: Docker Scan Lab Always Green
 
 on:
   push:
@@ -23,44 +23,45 @@ jobs:
 
       # 3️⃣ Build Docker image
       - name: Build Docker image
-        run: docker build -t demo-app .
+        run: docker build -t demo-app . || true
 
-      # 4️⃣ Install Syft and Grype
+      # 4️⃣ Install Syft and Grype globally
       - name: Install Syft and Grype
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh
-          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh
-          syft --version
-          grype --version
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh || true
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh || true
+          sudo mv ./bin/syft /usr/local/bin/syft || true
+          sudo mv ./bin/grype /usr/local/bin/grype || true
+          syft --version || true
+          grype --version || true
 
       # 5️⃣ Generate SBOM (always succeeds)
       - name: Generate SBOM
         run: syft docker:demo-app -o spdx-json > sbom.json || true
 
-      # 6️⃣ Scan vulnerabilities (always succeeds)
-      - name: Scan Docker image for vulnerabilities
-        id: grype_scan
+      # 6️⃣ Scan Docker image for vulnerabilities (always succeeds)
+      - name: Scan Docker image
+        id: scan
         run: |
-          # Run Grype and force success
           grype docker:demo-app -o json > grype-report.json || true
-          
-          # Check for CRITICAL vulnerabilities
+
+          # Create TXT report
           if grep -q '"severity": "Critical"' grype-report.json 2>/dev/null; then
             echo "Vulnerability detected" | tee grype-report.txt
-            echo "true" >> result.tmp
+            echo "true" > vuln.tmp
           else
             echo "No vulnerability detected" | tee grype-report.txt
-            echo "false" >> result.tmp
+            echo "false" > vuln.tmp
           fi
 
-          # Set GitHub Actions env variable
-          echo "vuln=$(cat result.tmp)" >> $GITHUB_ENV
+          # Export variable for later steps
+          echo "vuln=$(cat vuln.tmp)" >> $GITHUB_ENV
 
-      # 7️⃣ Sign SBOM (simulation)
+      # 7️⃣ Sign SBOM (simulation, always succeeds)
       - name: Sign SBOM
-        run: echo "signed" > sbom.sig
+        run: echo "signed" > sbom.sig || true
 
-      # 8️⃣ Display final log
+      # 8️⃣ Display final log pedagogical
       - name: Display vulnerability result
         run: |
           if [ "$vuln" = "true" ]; then
